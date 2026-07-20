@@ -160,7 +160,7 @@ function pushState() {
     track: latestTrack,
     lyrics: latestLyrics,
     mode: displayMode,
-    bridgeClients: mediaLinked || bridge?.isLinked?.() ? 1 : 0,
+    bridgeClients: clock.hasFreshExtension() || bridge?.isLinked?.() ? 1 : 0,
     translating,
   });
 }
@@ -172,7 +172,8 @@ function applyTiming(partial) {
       ...latestTrack,
       currentTime: clock.now(),
       isPlaying:
-        typeof partial.isPlaying === 'boolean'
+        typeof partial.isPlaying === 'boolean' &&
+        (partial.source === 'extension' || !clock.hasFreshExtension())
           ? partial.isPlaying
           : latestTrack.isPlaying,
       duration: clock.getDuration() || latestTrack.duration || 0,
@@ -188,6 +189,7 @@ function handlePlayback(payload) {
     currentTime: payload.currentTime,
     isPlaying: payload.isPlaying,
     duration: payload.duration,
+    source: 'extension',
   });
 }
 
@@ -205,6 +207,8 @@ async function handleNowPlaying(payload) {
   const token = ++fetchToken;
   const key = `${payload.artist}::${payload.track}`;
   const sameSong = latestLyrics?.key === key;
+  const source =
+    payload.source === 'youtube-extension' ? 'extension' : 'windows';
 
   latestTrack = {
     ...(latestTrack || {}),
@@ -212,19 +216,22 @@ async function handleNowPlaying(payload) {
     currentTime: sameSong ? clock.now() : payload.currentTime || 0,
   };
 
-  applyTiming({
-    currentTime: payload.currentTime,
-    isPlaying: payload.isPlaying,
-    duration: payload.duration,
-  });
-
-  if (sameSong) return;
+  if (sameSong) {
+    applyTiming({
+      currentTime: payload.currentTime,
+      isPlaying: payload.isPlaying,
+      duration: payload.duration,
+      source,
+    });
+    return;
+  }
 
   clock.reset();
   clock.sync({
     currentTime: payload.currentTime || 0,
     isPlaying: Boolean(payload.isPlaying),
     duration: payload.duration || 0,
+    source,
   });
 
   latestLyrics = {

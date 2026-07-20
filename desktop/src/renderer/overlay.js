@@ -15,13 +15,12 @@ let state = {
   translating: false,
 };
 
+let builtKey = '';
+let lastActive = -1;
+
 function lineText(line, mode) {
-  if (mode === 'translation') {
-    return line.translation || line.text;
-  }
-  if (mode === 'romaji') {
-    return line.romaji || line.text;
-  }
+  if (mode === 'translation') return line.translation || line.text;
+  if (mode === 'romaji') return line.romaji || line.text;
   return line.text;
 }
 
@@ -50,7 +49,6 @@ function activeIndex(lines, currentTime, duration) {
     return idx;
   }
 
-  // Plain lyrics: estimate the line from song progress.
   const dur = Number(duration) || 0;
   const t = Number(currentTime) || 0;
   if (dur <= 0 || t <= 0) return 0;
@@ -58,11 +56,68 @@ function activeIndex(lines, currentTime, duration) {
   return Math.min(lines.length - 1, Math.floor(progress * lines.length));
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function formatTime(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function buildLines(lines, mode) {
+  linesEl.innerHTML = lines
+    .map((line, i) => {
+      const main = escapeHtml(lineText(line, mode));
+      const sub = lineSub(line, mode);
+      const subHtml = sub ? `<span class="sub">${escapeHtml(sub)}</span>` : '';
+      return `<p class="line" data-idx="${i}">${main}${subHtml}</p>`;
+    })
+    .join('');
+  lastActive = -1;
+}
+
+function updateActive(current) {
+  if (current === lastActive) return;
+  const prev = linesEl.querySelector('.line.active');
+  const near = linesEl.querySelectorAll('.line.near');
+  if (prev) prev.classList.remove('active');
+  near.forEach((el) => el.classList.remove('near'));
+
+  if (current >= 0) {
+    const active = linesEl.querySelector(`.line[data-idx="${current}"]`);
+    if (active) {
+      active.classList.add('active');
+      const before = linesEl.querySelector(`.line[data-idx="${current - 1}"]`);
+      const after = linesEl.querySelector(`.line[data-idx="${current + 1}"]`);
+      before?.classList.add('near');
+      after?.classList.add('near');
+
+      const box = linesEl.getBoundingClientRect();
+      const top = active.offsetTop - linesEl.scrollTop;
+      if (top < 48 || top > box.height - 90) {
+        active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+  }
+  lastActive = current;
+}
+
 function renderLines() {
   const lyrics = state.lyrics;
   const mode = state.mode;
+  const timeLabel = lyrics ? formatTime(lyrics.currentTime) : '0:00';
 
-  modeLabel.textContent = state.translating ? 'translating…' : mode;
+  modeLabel.textContent = state.translating
+    ? 'translating…'
+    : `${mode} · ${timeLabel}`;
+
   modeButtons.forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
@@ -70,8 +125,10 @@ function renderLines() {
   if (!lyrics) {
     emptyEl.hidden = false;
     linesEl.hidden = true;
+    linesEl.innerHTML = '';
+    builtKey = '';
     emptyEl.innerHTML =
-      'Leave YouTube playing in Chrome.<br />This window reads the song from Windows.';
+      'Leave YouTube playing in Chrome.<br />Load the extension so lyrics can scroll in sync.';
     return;
   }
 
@@ -109,35 +166,16 @@ function renderLines() {
   emptyEl.hidden = true;
   linesEl.hidden = false;
 
-  const current = activeIndex(lines, lyrics.currentTime, lyrics.duration);
-  linesEl.innerHTML = lines
-    .map((line, i) => {
-      const cls = ['line'];
-      if (i === current) cls.push('active');
-      else if (Math.abs(i - current) === 1) cls.push('near');
-      const main = escapeHtml(lineText(line, mode));
-      const sub = lineSub(line, mode);
-      const subHtml = sub ? `<span class="sub">${escapeHtml(sub)}</span>` : '';
-      return `<p class="${cls.join(' ')}" data-idx="${i}">${main}${subHtml}</p>`;
-    })
-    .join('');
-
-  const active = linesEl.querySelector('.line.active');
-  if (active) {
-    const box = linesEl.getBoundingClientRect();
-    const top = active.offsetTop - linesEl.scrollTop;
-    if (top < 40 || top > box.height - 80) {
-      active.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
+  const nextKey = `${lyrics.key || ''}::${mode}::${lines.length}::${
+    lyrics.translated ? 1 : 0
+  }`;
+  if (nextKey !== builtKey) {
+    buildLines(lines, mode);
+    builtKey = nextKey;
   }
-}
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+  const current = activeIndex(lines, lyrics.currentTime, lyrics.duration);
+  updateActive(current);
 }
 
 function renderMeta() {
@@ -146,7 +184,7 @@ function renderMeta() {
 
   if (!track) {
     trackTitle.textContent = 'Waiting for YouTube…';
-    trackArtist.textContent = 'Play a video in Chrome — no extension needed';
+    trackArtist.textContent = 'Play a video · extension syncs the scroll';
     return;
   }
 
