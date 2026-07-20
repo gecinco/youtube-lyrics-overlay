@@ -1,16 +1,61 @@
 {
   "name": "youtube-lyrics-overlay",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Overlay discreto de letras enquanto você ouve YouTube",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --enable-logging"
+    "dev": "electron . --enable-logging",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win portable"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "electron": "^37.2.0",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.gabriel.youtube-lyrics-overlay",
+    "productName": "YouTube Lyrics Overlay",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      },
+      {
+        "from": "src/media-watch.ps1",
+        "to": "media-watch.ps1"
+      }
+    ],
+    "asarUnpack": [
+      "src/media-watch.ps1"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon256.png",
+      "artifactName": "YouTubeLyricsOverlay.exe"
+    },
+    "portable": {
+      "artifactName": "YouTubeLyricsOverlay.exe"
+    }
   }
 }

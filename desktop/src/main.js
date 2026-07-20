@@ -10,22 +10,41 @@ const {
 } = require('electron');
 const path = require('path');
 const { startBridge } = require('./bridge');
+const { startMediaWatch } = require('./media-watch');
 const { fetchLyrics, ensureTranslation } = require('./lyrics');
 const { loadPrefs, savePrefs } = require('./store');
 
 let overlayWindow = null;
 let tray = null;
 let bridge = null;
+let mediaWatch = null;
 let latestTrack = null;
 let latestLyrics = null;
 let displayMode = 'original';
 let fetchToken = 0;
 let translating = false;
+let mediaLinked = false;
 
 const SETTINGS = {
   width: 340,
   height: 420,
 };
+
+function iconPath(name) {
+  // Works in dev and inside the packaged exe.
+  const candidates = [
+    path.join(__dirname, '..', 'assets', name),
+    path.join(__dirname, '..', '..', 'extension', 'icons', name),
+    path.join(process.resourcesPath || '', 'assets', name),
+  ];
+  return candidates.find((p) => {
+    try {
+      return require('fs').existsSync(p);
+    } catch {
+      return false;
+    }
+  });
+}
 
 function defaultBounds() {
   const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
@@ -89,11 +108,8 @@ function createOverlay() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '..', '..', 'extension', 'icons', 'icon16.png');
-  let image = nativeImage.createFromPath(iconPath);
-  if (image.isEmpty()) {
-    image = nativeImage.createEmpty();
-  }
+  const file = iconPath('icon16.png');
+  let image = file ? nativeImage.createFromPath(file) : nativeImage.createEmpty();
 
   tray = new Tray(image);
   tray.setToolTip('YouTube Lyrics Overlay');
@@ -130,12 +146,13 @@ function pushState() {
     track: latestTrack,
     lyrics: latestLyrics,
     mode: displayMode,
-    bridgeClients: bridge?.isLinked?.() || bridge?.clientCount?.() ? 1 : 0,
+    bridgeClients: mediaLinked || bridge?.isLinked?.() ? 1 : 0,
     translating,
   });
 }
 
 async function handleNowPlaying(payload) {
+  mediaLinked = Boolean(payload?.track);
   latestTrack = payload;
   pushState();
 
@@ -275,6 +292,13 @@ app.whenReady().then(() => {
   createOverlay();
   createTray();
 
+  // Primary path on Windows: read Chrome/YouTube from the OS. No extension needed.
+  mediaWatch = startMediaWatch({
+    onNowPlaying: handleNowPlaying,
+    intervalMs: 1200,
+  });
+
+  // Optional legacy bridge if someone still uses the extension.
   bridge = startBridge({
     onNowPlaying: handleNowPlaying,
     onConnectionChange: pushState,
@@ -298,9 +322,10 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  mediaWatch?.stop();
   bridge?.close();
 });
 
 app.on('window-all-closed', () => {
-  // Stay alive for tray + Chrome bridge.
+  // Stay alive for tray + media watch.
 });

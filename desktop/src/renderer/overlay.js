@@ -60,7 +60,8 @@ function renderLines() {
   if (!lyrics) {
     emptyEl.hidden = false;
     linesEl.hidden = true;
-    emptyEl.innerHTML = 'Softly waiting for a song.<br />The words will settle here.';
+    emptyEl.innerHTML =
+      'Leave YouTube playing in Chrome.<br />This window reads the song from Windows.';
     return;
   }
 
@@ -135,7 +136,7 @@ function renderMeta() {
 
   if (!track) {
     trackTitle.textContent = 'Waiting for YouTube…';
-    trackArtist.textContent = 'Open a video and press play';
+    trackArtist.textContent = 'Play a video in Chrome — no extension needed';
     return;
   }
 
