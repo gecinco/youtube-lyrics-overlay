@@ -185,7 +185,7 @@ function normalizeTrackName(track) {
   return String(track || '')
     .replace(/\s*\(\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\)/gi, '')
     .replace(/\s*\[\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\]/gi, '')
-    .replace(/\s*\(\s*Official\s*(Music\s*)?Video\s*\)/gi, '')
+    .replace(/\s*\(\s*Official\s*(Music\s*|HD\s*|4K\s*)?Video\s*\)/gi, '')
     .replace(/\s*\(\s*Lyric\s*Video\s*\)/gi, '')
     .replace(/\s*\(\s*Official\s*Audio\s*\)/gi, '')
     .replace(/\s{2,}/g, ' ')

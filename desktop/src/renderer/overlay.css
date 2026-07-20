@@ -149,22 +149,26 @@ button.ghost {
 .lyrics {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+.lines {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 16px;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
 }
 
-.lines {
-  min-height: 100%;
-}
-
-.lyrics::-webkit-scrollbar {
+.lines::-webkit-scrollbar {
   width: 6px;
 }
 
-.lyrics::-webkit-scrollbar-thumb {
+.lines::-webkit-scrollbar-thumb {
   background: rgba(244, 235, 225, 0.16);
   border-radius: 999px;
 }

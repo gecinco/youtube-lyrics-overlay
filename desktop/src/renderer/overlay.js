@@ -84,8 +84,11 @@ function buildLines(lines, mode) {
 }
 
 function ensureCenterPadding() {
-  // Extra space so the first/last lines can also sit in the visual center.
-  const pad = Math.max(48, Math.floor(linesEl.clientHeight * 0.42));
+  // Pad inside the scrollable list so first/last lines can sit in the center.
+  const viewH = linesEl.clientHeight || 0;
+  if (viewH < 40) return;
+  const pad = Math.max(40, Math.floor(viewH * 0.4));
+  if (linesEl.style.paddingTop === `${pad}px`) return;
   linesEl.style.paddingTop = `${pad}px`;
   linesEl.style.paddingBottom = `${pad}px`;
 }
@@ -95,15 +98,17 @@ function scrollLineIntoView(active) {
 
   ensureCenterPadding();
 
+  // offsetTop is relative to offsetParent; with padding on linesEl it stays correct.
   const viewH = linesEl.clientHeight;
+  if (viewH < 40) return;
+
   const lineTop = active.offsetTop;
   const lineH = active.offsetHeight || 24;
   const target = lineTop - viewH / 2 + lineH / 2;
   const maxScroll = Math.max(0, linesEl.scrollHeight - viewH);
   const next = Math.min(maxScroll, Math.max(0, target));
 
-  // Always re-center the white line in this panel (not the window).
-  linesEl.scrollTo({ top: next, behavior: 'smooth' });
+  linesEl.scrollTop = next;
 }
 
 function updateActive(current) {
