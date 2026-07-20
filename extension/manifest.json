@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "description": "Envia o que está tocando no YouTube pro overlay de letras.",
   "permissions": ["storage"],
-  "host_permissions": ["http://127.0.0.1:19283/*"],
+  "host_permissions": [
+    "http://127.0.0.1:19283/*",
+    "ws://127.0.0.1:19283/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },

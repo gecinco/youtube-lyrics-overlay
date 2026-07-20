@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Fraunces:opsz,wght@9..144,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500&display=swap');
 
 * {
   box-sizing: border-box;
@@ -7,28 +7,65 @@
 }
 
 body {
-  width: 260px;
-  padding: 18px 16px;
+  width: 280px;
+  padding: 18px 16px 16px;
   font-family: 'DM Sans', sans-serif;
-  background: #1a1714;
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(240, 194, 122, 0.12), transparent 55%),
+    #1a1714;
   color: #f3ebe2;
 }
 
-h1 {
+.brand {
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 500;
-  margin-bottom: 8px;
   color: #f0c27a;
+  margin-bottom: 10px;
 }
 
 .status {
-  font-size: 0.85rem;
-  line-height: 1.4;
-  margin-bottom: 6px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
+.status.ok {
+  color: #9dceb3;
+}
+
+.status.bad {
+  color: #e0a090;
+}
+
+.track {
+  padding: 10px 0 4px;
+  border-top: 1px solid rgba(243, 235, 226, 0.12);
+  margin-bottom: 10px;
+}
+
+.label {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 4px;
+}
+
+.song {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.artist {
+  font-size: 0.82rem;
+  opacity: 0.7;
+  margin-top: 2px;
 }
 
 .hint {
-  font-size: 0.75rem;
-  opacity: 0.55;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  opacity: 0.5;
 }

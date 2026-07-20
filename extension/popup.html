@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <title>Lyrics Overlay</title>
@@ -7,9 +7,14 @@
   </head>
   <body>
     <main>
-      <h1>Lyrics Overlay</h1>
-      <p class="status" id="status">Aguardando o app desktop…</p>
-      <p class="hint">Abra o app e toque algo no YouTube.</p>
+      <p class="brand">Lyrics Overlay</p>
+      <p class="status" id="status">Checking desktop app…</p>
+      <div class="track" id="track" hidden>
+        <p class="label">Now playing</p>
+        <p class="song" id="song"></p>
+        <p class="artist" id="artist"></p>
+      </div>
+      <p class="hint" id="hint">Keep the desktop app open while you watch YouTube.</p>
     </main>
     <script src="popup.js"></script>
   </body>
