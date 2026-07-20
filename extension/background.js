@@ -1,10 +1,9 @@
 const PORT = 19283;
-const WS_URL = `ws://127.0.0.1:${PORT}`;
+const HTTP_BASE = `http://127.0.0.1:${PORT}`;
 
-let socket = null;
-let reconnectTimer = null;
 let latestPayload = null;
 let connected = false;
+let pollTimer = null;
 
 function setBadge(text, color) {
   chrome.action.setBadgeText({ text });
@@ -23,76 +22,74 @@ function updateBadge() {
   setBadge('on', '#3d7a5a');
 }
 
-function connect() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    return;
-  }
-
+async function pingDesktop() {
   try {
-    socket = new WebSocket(WS_URL);
+    const res = await fetch(`${HTTP_BASE}/health`, { method: 'GET' });
+    connected = res.ok;
   } catch {
     connected = false;
-    updateBadge();
-    scheduleReconnect();
-    return;
   }
-
-  socket.addEventListener('open', () => {
-    connected = true;
-    updateBadge();
-    if (latestPayload) {
-      socket.send(JSON.stringify({ type: 'NOW_PLAYING', payload: latestPayload }));
-    }
-  });
-
-  socket.addEventListener('close', () => {
-    connected = false;
-    updateBadge();
-    scheduleReconnect();
-  });
-
-  socket.addEventListener('error', () => {
-    connected = false;
-    updateBadge();
-    try {
-      socket.close();
-    } catch {
-      /* ignore */
-    }
-  });
-}
-
-function scheduleReconnect() {
-  if (reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connect();
-  }, 2000);
-}
-
-function forwardNowPlaying(payload) {
-  latestPayload = payload;
   updateBadge();
-
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    connect();
-    return;
-  }
-
-  socket.send(JSON.stringify({ type: 'NOW_PLAYING', payload }));
+  return connected;
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+async function forwardNowPlaying(payload) {
+  latestPayload = payload;
+
+  try {
+    const res = await fetch(`${HTTP_BASE}/now-playing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'NOW_PLAYING', payload }),
+    });
+    connected = res.ok;
+  } catch {
+    connected = false;
+  }
+
+  updateBadge();
+  return connected;
+}
+
+async function injectIntoYouTubeTabs() {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: ['*://www.youtube.com/*', '*://youtube.com/*'],
+    });
+
+    for (const tab of tabs) {
+      if (!tab.id) continue;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+      } catch {
+        // Tab may be a restricted URL or already injecting.
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function startHealthPoll() {
+  if (pollTimer) return;
+  pingDesktop();
+  pollTimer = setInterval(pingDesktop, 3000);
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === 'NOW_PLAYING') {
-    forwardNowPlaying(msg.payload);
-    sendResponse({ ok: true, connected });
+    forwardNowPlaying(msg.payload).then((ok) => {
+      sendResponse({ ok, connected: ok });
+    });
     return true;
   }
 
   if (msg?.type === 'GET_STATUS') {
-    sendResponse({
-      connected,
-      latestPayload,
+    pingDesktop().then(() => {
+      sendResponse({ connected, latestPayload });
     });
     return true;
   }
@@ -100,10 +97,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   updateBadge();
-  connect();
+  startHealthPoll();
+  await injectIntoYouTubeTabs();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  updateBadge();
+  startHealthPoll();
+  injectIntoYouTubeTabs();
+});
+
+// Keep the worker a bit more alive while YouTube tabs exist.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+  if (!tab.url || !/https?:\/\/(www\.)?youtube\.com\//.test(tab.url)) return;
+  chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js'],
+  }).catch(() => {});
 });
 
 updateBadge();
-connect();
+startHealthPoll();
+injectIntoYouTubeTabs();

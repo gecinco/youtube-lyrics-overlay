@@ -27,7 +27,8 @@ Uma janelinha aparece no canto superior direito. Ela fica por cima das outras ja
 2. Ative **Modo do desenvolvedor**
 3. **Carregar sem compactação** → pasta `extension/`
 4. Deixe o app desktop rodando e abra um vídeo no YouTube
-5. O ícone da extensão fica `on` / `♪` quando conectada
+5. Se a aba do YouTube já estava aberta, **recarregue a página** (F5) depois de carregar a extensão
+6. O ícone da extensão fica `on` / `♪` quando conectada (se ficar `off`, o app desktop não está rodando)
 
 ## Estrutura
 

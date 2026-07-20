@@ -1,7 +1,12 @@
 (() => {
+  // Avoid double-inject when background re-injects into an open tab.
+  if (window.__lyricsOverlayLoaded) return;
+  window.__lyricsOverlayLoaded = true;
+
   const BRIDGE = 'lyrics-overlay';
   let lastFingerprint = '';
   let tickTimer = null;
+  let boundVideo = null;
 
   function textOf(selector) {
     const el = document.querySelector(selector);
@@ -17,6 +22,8 @@
       .replace(/\s*\[\s*Lyric\s*Video\s*\]/gi, '')
       .replace(/\s*\(\s*Official\s*Audio\s*\)/gi, '')
       .replace(/\s*\[\s*Official\s*Audio\s*\]/gi, '')
+      .replace(/\s*\(\s*\d{4}\s*Remaster(?:ed)?\s*\)/gi, '')
+      .replace(/\s*\[\s*\d{4}\s*Remaster(?:ed)?\s*\]/gi, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
   }
@@ -30,14 +37,13 @@
       const [left, ...rest] = cleaned.split(sep);
       const right = rest.join(sep).trim();
       if (left && right) {
-        // Common patterns: "Artist - Track" or "Track - Artist"
-        // Prefer channel match when possible.
         if (channel && right.toLowerCase().includes(channel.toLowerCase().slice(0, 12))) {
           return { artist: right, track: left };
         }
         if (channel && left.toLowerCase().includes(channel.toLowerCase().slice(0, 12))) {
           return { artist: left, track: right };
         }
+        // "Fear of the Dark (2015 Remaster)" with channel Iron Maiden → artist = channel
         return { artist: left, track: right };
       }
     }
@@ -68,16 +74,25 @@
 
     const player = getPlayer();
     const pageTitle = cleanTitle(document.title || '');
-    const heading = textOf('h1.ytd-watch-metadata yt-formatted-string') ||
+    const heading =
+      textOf('h1.ytd-watch-metadata yt-formatted-string') ||
       textOf('h1 yt-formatted-string') ||
+      textOf('ytd-watch-metadata h1') ||
       pageTitle;
     const channel =
       textOf('#channel-name a') ||
       textOf('ytd-channel-name a') ||
       textOf('#owner #channel-name a') ||
+      textOf('ytd-video-owner-renderer a') ||
       '';
 
-    const { artist, track } = parseArtistAndTrack(heading || pageTitle, channel);
+    let { artist, track } = parseArtistAndTrack(heading || pageTitle, channel);
+
+    // Titles without "Artist - Track" (common on official channels).
+    if ((!heading.includes(' - ') && !heading.includes(' – ')) && channel) {
+      artist = channel.replace(/VEVO$/i, '').trim() || artist;
+      track = cleanTitle(heading || pageTitle);
+    }
 
     return {
       source: 'youtube',
@@ -112,28 +127,45 @@
     if (!force && fp === lastFingerprint) return;
     lastFingerprint = fp;
 
-    chrome.runtime.sendMessage({
-      type: 'NOW_PLAYING',
-      payload,
+    try {
+      chrome.runtime.sendMessage({ type: 'NOW_PLAYING', payload }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch {
+      /* extension context invalidated — reload the tab */
+    }
+  }
+
+  function bindPlayer() {
+    const player = getPlayer();
+    if (!player || player === boundVideo) return;
+    boundVideo = player;
+
+    ['play', 'pause', 'seeked', 'loadedmetadata'].forEach((evt) => {
+      player.addEventListener(evt, () => publish(true));
     });
   }
 
   function startWatching() {
     if (tickTimer) clearInterval(tickTimer);
-    tickTimer = setInterval(() => publish(false), 1000);
+    tickTimer = setInterval(() => {
+      bindPlayer();
+      publish(false);
+    }, 1000);
 
     document.addEventListener('yt-navigate-finish', () => {
       lastFingerprint = '';
-      setTimeout(() => publish(true), 400);
+      boundVideo = null;
+      setTimeout(() => {
+        bindPlayer();
+        publish(true);
+      }, 500);
     });
 
-    const player = getPlayer();
-    if (player) {
-      ['play', 'pause', 'seeked', 'timeupdate'].forEach((evt) => {
-        player.addEventListener(evt, () => publish(evt !== 'timeupdate'));
-      });
-    }
+    const obs = new MutationObserver(() => bindPlayer());
+    obs.observe(document.documentElement, { childList: true, subtree: true });
 
+    bindPlayer();
     publish(true);
   }
 

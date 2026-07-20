@@ -130,7 +130,7 @@ function pushState() {
     track: latestTrack,
     lyrics: latestLyrics,
     mode: displayMode,
-    bridgeClients: bridge?.clientCount() || 0,
+    bridgeClients: bridge?.isLinked?.() || bridge?.clientCount?.() ? 1 : 0,
     translating,
   });
 }

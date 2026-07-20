@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "YouTube Lyrics Overlay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Envia o que está tocando no YouTube pro overlay de letras.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": [
-    "http://127.0.0.1:19283/*",
-    "ws://127.0.0.1:19283/*"
+    "*://www.youtube.com/*",
+    "*://youtube.com/*",
+    "http://127.0.0.1:19283/*"
   ],
   "background": {
     "service_worker": "background.js"
