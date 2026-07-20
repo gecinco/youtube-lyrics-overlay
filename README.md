@@ -19,12 +19,15 @@ npm install
 npm start
 ```
 
+Uma janelinha aparece no canto superior direito. Ela fica por cima das outras janelas.
+
 ### 2. Extensão Chrome
 
 1. Abra `chrome://extensions`
 2. Ative **Modo do desenvolvedor**
 3. **Carregar sem compactação** → pasta `extension/`
 4. Deixe o app desktop rodando e abra um vídeo no YouTube
+5. O ícone da extensão fica `on` / `♪` quando conectada
 
 ## Estrutura
 

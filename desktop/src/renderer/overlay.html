@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lyrics Overlay</title>
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <div class="shell" id="shell">
+      <header class="bar" id="drag">
+        <div class="identity">
+          <span class="mark">lyrics</span>
+          <span class="dot" id="connDot" title="Bridge status"></span>
+        </div>
+        <div class="actions">
+          <button type="button" class="mode" data-mode="original" title="Original lyrics">Aa</button>
+          <button type="button" class="mode" data-mode="translation" title="Translation">PT</button>
+          <button type="button" class="mode" data-mode="romaji" title="Romaji / reading">羅</button>
+          <button type="button" class="ghost" id="hideBtn" title="Hide (Ctrl+Shift+L)">✕</button>
+        </div>
+      </header>
+
+      <section class="meta" id="meta">
+        <p class="track" id="trackTitle">Waiting for YouTube…</p>
+        <p class="artist" id="trackArtist">Open a video and press play</p>
+      </section>
+
+      <section class="lyrics" id="lyrics">
+        <p class="empty" id="empty">
+          Softly waiting for a song.<br />
+          The words will settle here.
+        </p>
+        <div class="lines" id="lines" hidden></div>
+      </section>
+
+      <footer class="foot">
+        <span id="modeLabel">original</span>
+        <span class="sep">·</span>
+        <span>Ctrl+Shift+L hide</span>
+      </footer>
+    </div>
+    <script src="overlay.js"></script>
+  </body>
+</html>
