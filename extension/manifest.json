@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Lyrics Overlay",
-  "version": "0.1.1",
-  "description": "Envia o que está tocando no YouTube pro overlay de letras.",
+  "version": "0.2.0",
+  "description": "Envia o tempo do player do YouTube pro overlay sincronizar a letra.",
   "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": [
     "*://www.youtube.com/*",

@@ -198,7 +198,7 @@ function usableArtist(artist) {
   return artist.trim();
 }
 
-function scoreHit(hit, artist, track) {
+function scoreHit(hit, artist, track, duration) {
   const a = (hit.artistName || '').toLowerCase();
   const t = (hit.trackName || '').toLowerCase();
   const wantA = (artist || '').toLowerCase();
@@ -212,27 +212,49 @@ function scoreHit(hit, artist, track) {
   if (wantA && a === wantA) score += 6;
   else if (wantA && a.includes(wantA)) score += 3;
 
-  if (hit.syncedLyrics) score += 2;
+  // Synced lyrics are required for auto-scroll to feel right.
+  if (hit.syncedLyrics) score += 10;
   else if (hit.plainLyrics) score += 1;
 
+  if (duration > 0 && hit.duration > 0) {
+    const delta = Math.abs(hit.duration - duration);
+    if (delta <= 2) score += 6;
+    else if (delta <= 5) score += 4;
+    else if (delta <= 12) score += 2;
+    else score -= 2;
+  }
+
   return score;
+}
+
+function isJunkLine(text) {
+  const t = String(text || '').trim();
+  if (!t) return true;
+  if (/^\(\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\)$/i.test(t)) return true;
+  if (/^\[\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\]$/i.test(t)) return true;
+  if (/^(verse|chorus|bridge|intro|outro)\s*\d*$/i.test(t)) return true;
+  return false;
 }
 
 async function searchLrclib({ artist, track, duration }) {
   const cleanArtist = usableArtist(artist);
   const cleanTrack = normalizeTrackName(track) || track;
+  const wantDuration = Number(duration) || 0;
 
   if (cleanArtist && cleanTrack) {
     const params = new URLSearchParams({
       artist_name: cleanArtist,
       track_name: cleanTrack,
     });
-    if (duration && Number.isFinite(duration) && duration > 0) {
-      params.set('duration', String(Math.round(duration)));
+    if (wantDuration > 0) {
+      params.set('duration', String(Math.round(wantDuration)));
     }
 
     const res = await fetch(`https://lrclib.net/api/get?${params.toString()}`);
-    if (res.ok) return res.json();
+    if (res.ok) {
+      const hit = await res.json();
+      if (hit?.syncedLyrics || hit?.plainLyrics) return hit;
+    }
   }
 
   const queries = [
@@ -252,14 +274,14 @@ async function searchLrclib({ artist, track, duration }) {
     if (!Array.isArray(results)) continue;
 
     for (const hit of results) {
-      const score = scoreHit(hit, cleanArtist, cleanTrack);
+      const score = scoreHit(hit, cleanArtist, cleanTrack, wantDuration);
       if (score > bestScore) {
         bestScore = score;
         best = hit;
       }
     }
 
-    if (best && bestScore >= 5) break;
+    if (best?.syncedLyrics && bestScore >= 12) break;
   }
 
   return best;
@@ -269,13 +291,14 @@ async function fetchLyrics({ artist, track, duration }) {
   const cleanArtist = usableArtist(artist);
   const cleanTrack = normalizeTrackName(track) || track;
   const cached = readCache(cleanArtist || artist, cleanTrack);
-  if (cached) return cached;
+  // Prefer a fresh lookup when the cache only has plain (unsynced) lyrics.
+  if (cached?.synced && cached.lines?.length) return cached;
 
   const hit = await searchLrclib({ artist: cleanArtist, track: cleanTrack, duration });
   if (!hit) return null;
 
-  const synced = parseLrc(hit.syncedLyrics);
-  const unsynced = plainToLines(hit.plainLyrics);
+  const synced = parseLrc(hit.syncedLyrics).filter((l) => !isJunkLine(l.text));
+  const unsynced = plainToLines(hit.plainLyrics).filter((l) => !isJunkLine(l.text));
   const baseLines = synced.length ? synced : unsynced;
 
   const lines = baseLines.map((line) => ({
@@ -290,6 +313,7 @@ async function fetchLyrics({ artist, track, duration }) {
     lines,
     hasCjk: lines.some((l) => l.romaji),
     translated: false,
+    duration: Number(hit.duration) || 0,
     resolvedArtist: hit.artistName || cleanArtist || artist,
     resolvedTrack: hit.trackName || cleanTrack,
   };

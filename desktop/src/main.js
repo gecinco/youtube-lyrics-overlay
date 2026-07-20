@@ -13,6 +13,7 @@ const { startBridge } = require('./bridge');
 const { startMediaWatch } = require('./media-watch');
 const { fetchLyrics, ensureTranslation } = require('./lyrics');
 const { loadPrefs, savePrefs } = require('./store');
+const { createPlaybackClock } = require('./playback-clock');
 
 let overlayWindow = null;
 let tray = null;
@@ -24,6 +25,8 @@ let displayMode = 'original';
 let fetchToken = 0;
 let translating = false;
 let mediaLinked = false;
+let syncTimer = null;
+const clock = createPlaybackClock();
 
 const SETTINGS = {
   width: 340,
@@ -142,6 +145,17 @@ function createTray() {
 
 function pushState() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+
+  const currentTime = clock.now();
+  if (latestLyrics) {
+    latestLyrics = {
+      ...latestLyrics,
+      currentTime,
+      isPlaying: latestTrack?.isPlaying,
+      duration: clock.getDuration() || latestLyrics.duration || latestTrack?.duration || 0,
+    };
+  }
+
   overlayWindow.webContents.send('state', {
     track: latestTrack,
     lyrics: latestLyrics,
@@ -151,36 +165,74 @@ function pushState() {
   });
 }
 
+function applyTiming(partial) {
+  clock.sync(partial);
+  if (latestTrack) {
+    latestTrack = {
+      ...latestTrack,
+      currentTime: clock.now(),
+      isPlaying:
+        typeof partial.isPlaying === 'boolean'
+          ? partial.isPlaying
+          : latestTrack.isPlaying,
+      duration: clock.getDuration() || latestTrack.duration || 0,
+    };
+  }
+  pushState();
+}
+
+function handlePlayback(payload) {
+  if (!payload) return;
+  mediaLinked = true;
+  applyTiming({
+    currentTime: payload.currentTime,
+    isPlaying: payload.isPlaying,
+    duration: payload.duration,
+  });
+}
+
 async function handleNowPlaying(payload) {
   mediaLinked = Boolean(payload?.track);
-  latestTrack = payload;
-  pushState();
 
   if (!payload?.track) {
+    latestTrack = null;
     latestLyrics = null;
+    clock.reset();
     pushState();
     return;
   }
 
   const token = ++fetchToken;
   const key = `${payload.artist}::${payload.track}`;
+  const sameSong = latestLyrics?.key === key;
 
-  if (latestLyrics?.key === key) {
-    latestLyrics = {
-      ...latestLyrics,
-      currentTime: payload.currentTime || 0,
-      isPlaying: Boolean(payload.isPlaying),
-    };
-    pushState();
-    return;
-  }
+  latestTrack = {
+    ...(latestTrack || {}),
+    ...payload,
+    currentTime: sameSong ? clock.now() : payload.currentTime || 0,
+  };
+
+  applyTiming({
+    currentTime: payload.currentTime,
+    isPlaying: payload.isPlaying,
+    duration: payload.duration,
+  });
+
+  if (sameSong) return;
+
+  clock.reset();
+  clock.sync({
+    currentTime: payload.currentTime || 0,
+    isPlaying: Boolean(payload.isPlaying),
+    duration: payload.duration || 0,
+  });
 
   latestLyrics = {
     key,
     status: 'loading',
     artist: payload.artist,
     track: payload.track,
-    currentTime: payload.currentTime || 0,
+    currentTime: clock.now(),
     isPlaying: Boolean(payload.isPlaying),
   };
   pushState();
@@ -189,7 +241,7 @@ async function handleNowPlaying(payload) {
     const result = await fetchLyrics({
       artist: payload.artist,
       track: payload.track,
-      duration: payload.duration,
+      duration: payload.duration || clock.getDuration(),
     });
 
     if (token !== fetchToken) return;
@@ -199,20 +251,24 @@ async function handleNowPlaying(payload) {
       status: result ? 'ready' : 'missing',
       artist: payload.artist,
       track: payload.track,
-      currentTime: payload.currentTime || 0,
+      currentTime: clock.now(),
       isPlaying: Boolean(payload.isPlaying),
+      duration: result?.duration || payload.duration || 0,
       ...result,
     };
 
-    // Fill in artist/title from LRCLIB when YouTube only gave the song name.
+    if (result?.duration) {
+      clock.sync({ duration: result.duration });
+    }
+
     if (result?.resolvedArtist || result?.resolvedTrack) {
       latestTrack = {
         ...latestTrack,
         artist: result.resolvedArtist || latestTrack.artist,
-        track: result.resolvedTrack || latestTrack.track,
-        title: `${result.resolvedArtist || latestTrack.artist} - ${
+        track: shortTrackName(result.resolvedTrack || latestTrack.track),
+        title: `${result.resolvedArtist || latestTrack.artist} - ${shortTrackName(
           result.resolvedTrack || latestTrack.track
-        }`,
+        )}`,
       };
     }
 
@@ -228,12 +284,20 @@ async function handleNowPlaying(payload) {
       artist: payload.artist,
       track: payload.track,
       message: err?.message || 'Could not fetch lyrics',
-      currentTime: payload.currentTime || 0,
+      currentTime: clock.now(),
       isPlaying: Boolean(payload.isPlaying),
     };
   }
 
   pushState();
+}
+
+function shortTrackName(track) {
+  const cleaned = String(track || '').replace(/\s{2,}/g, ' ').trim();
+  // LRCLIB sometimes returns "Album - Album - 02 - Song"
+  const parts = cleaned.split(/\s*-\s*/);
+  if (parts.length >= 3) return parts[parts.length - 1].trim() || cleaned;
+  return cleaned;
 }
 
 async function applyMode(mode) {
@@ -304,17 +368,22 @@ app.whenReady().then(() => {
   createOverlay();
   createTray();
 
-  // Primary path on Windows: read Chrome/YouTube from the OS. No extension needed.
+  // Song identity from Windows; precise playhead from the Chrome extension.
   mediaWatch = startMediaWatch({
     onNowPlaying: handleNowPlaying,
-    intervalMs: 1200,
+    intervalMs: 1500,
   });
 
-  // Optional legacy bridge if someone still uses the extension.
   bridge = startBridge({
     onNowPlaying: handleNowPlaying,
+    onPlayback: handlePlayback,
     onConnectionChange: pushState,
   });
+
+  // Smooth lyric scrolling between timing updates.
+  syncTimer = setInterval(() => {
+    if (latestTrack?.isPlaying || clock.now() > 0) pushState();
+  }, 250);
 
   globalShortcut.register('CommandOrControl+Shift+L', toggleOverlay);
   globalShortcut.register('CommandOrControl+Shift+.', cycleMode);
@@ -336,6 +405,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   mediaWatch?.stop();
   bridge?.close();
+  if (syncTimer) clearInterval(syncTimer);
 });
 
 app.on('window-all-closed', () => {

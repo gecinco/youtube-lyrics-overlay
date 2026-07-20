@@ -35,17 +35,27 @@ function lineSub(line, mode) {
   return '';
 }
 
-function activeIndex(lines, currentTime) {
+function activeIndex(lines, currentTime, duration) {
   if (!lines?.length) return -1;
-  if (lines.every((l) => l.timeMs == null)) return -1;
-  const ms = Math.max(0, (currentTime || 0) * 1000);
-  let idx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].timeMs == null) continue;
-    if (lines[i].timeMs <= ms) idx = i;
-    else break;
+
+  const synced = lines.some((l) => l.timeMs != null);
+  if (synced) {
+    const ms = Math.max(0, (currentTime || 0) * 1000);
+    let idx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].timeMs == null) continue;
+      if (lines[i].timeMs <= ms) idx = i;
+      else break;
+    }
+    return idx;
   }
-  return idx;
+
+  // Plain lyrics: estimate the line from song progress.
+  const dur = Number(duration) || 0;
+  const t = Number(currentTime) || 0;
+  if (dur <= 0 || t <= 0) return 0;
+  const progress = Math.min(0.999, Math.max(0, t / dur));
+  return Math.min(lines.length - 1, Math.floor(progress * lines.length));
 }
 
 function renderLines() {
@@ -99,7 +109,7 @@ function renderLines() {
   emptyEl.hidden = true;
   linesEl.hidden = false;
 
-  const current = activeIndex(lines, lyrics.currentTime);
+  const current = activeIndex(lines, lyrics.currentTime, lyrics.duration);
   linesEl.innerHTML = lines
     .map((line, i) => {
       const cls = ['line'];

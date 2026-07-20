@@ -3,7 +3,7 @@ const { WebSocketServer } = require('ws');
 
 const PORT = 19283;
 
-function startBridge({ onNowPlaying, onConnectionChange }) {
+function startBridge({ onNowPlaying, onPlayback, onConnectionChange }) {
   const clients = new Set();
   let lastSeenAt = 0;
 
@@ -32,7 +32,10 @@ function startBridge({ onNowPlaying, onConnectionChange }) {
       return;
     }
 
-    if (req.method === 'POST' && req.url === '/now-playing') {
+    if (
+      req.method === 'POST' &&
+      (req.url === '/now-playing' || req.url === '/playback')
+    ) {
       let body = '';
       req.on('data', (chunk) => {
         body += chunk;
@@ -43,7 +46,11 @@ function startBridge({ onNowPlaying, onConnectionChange }) {
           const msg = JSON.parse(body || '{}');
           const payload = msg.payload !== undefined ? msg.payload : msg;
           lastSeenAt = Date.now();
-          onNowPlaying?.(payload || null);
+          if (req.url === '/playback') {
+            onPlayback?.(payload || null);
+          } else {
+            onNowPlaying?.(payload || null);
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
         } catch (err) {
