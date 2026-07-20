@@ -12,6 +12,7 @@ let state = {
   lyrics: null,
   mode: 'original',
   bridgeClients: 0,
+  translating: false,
 };
 
 function lineText(line, mode) {
@@ -51,7 +52,7 @@ function renderLines() {
   const lyrics = state.lyrics;
   const mode = state.mode;
 
-  modeLabel.textContent = mode;
+  modeLabel.textContent = state.translating ? 'translating…' : mode;
   modeButtons.forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });

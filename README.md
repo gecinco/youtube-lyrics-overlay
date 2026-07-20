@@ -41,7 +41,11 @@ desktop/     → janela flutuante + busca de letras
 | Atalho | Ação |
 |--------|------|
 | `Ctrl+Shift+L` | Mostrar / esconder overlay |
-| `Ctrl+Shift+.` | Alternar modo da letra |
+| `Ctrl+Shift+.` | Alternar modo da letra (`original` → `translation` → `romaji`) |
+
+No overlay: **Aa** original · **PT** tradução · **羅** romaji (kana; kanji fica como está na v1).
+
+O app também fica na bandeja do sistema (tray). Fechar a janela só esconde — pra sair de verdade, use Quit no tray.
 
 ## Requisitos
 

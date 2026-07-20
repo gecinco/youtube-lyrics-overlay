@@ -1,36 +1,54 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  globalShortcut,
+  ipcMain,
+  screen,
+  Tray,
+  Menu,
+  nativeImage,
+} = require('electron');
 const path = require('path');
 const { startBridge } = require('./bridge');
 const { fetchLyrics, ensureTranslation } = require('./lyrics');
+const { loadPrefs, savePrefs } = require('./store');
 
 let overlayWindow = null;
+let tray = null;
 let bridge = null;
 let latestTrack = null;
 let latestLyrics = null;
-let displayMode = 'original'; // original | translation | romaji
+let displayMode = 'original';
 let fetchToken = 0;
+let translating = false;
 
 const SETTINGS = {
   width: 340,
   height: 420,
-  opacity: 0.94,
 };
 
-function createOverlay() {
-  const display = screen.getPrimaryDisplay();
-  const { width: sw } = display.workAreaSize;
-  const margin = 18;
-
-  overlayWindow = new BrowserWindow({
+function defaultBounds() {
+  const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
+  return {
     width: SETTINGS.width,
     height: SETTINGS.height,
-    x: sw - SETTINGS.width - margin,
-    y: margin + 12,
+    x: sw - SETTINGS.width - 18,
+    y: 30,
+  };
+}
+
+function createOverlay() {
+  const prefs = loadPrefs();
+  const bounds = prefs.bounds || defaultBounds();
+  displayMode = prefs.mode || 'original';
+
+  overlayWindow = new BrowserWindow({
+    ...bounds,
     frame: false,
     transparent: true,
     resizable: true,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    skipTaskbar: true,
     hasShadow: false,
     thickFrame: false,
     show: false,
@@ -50,9 +68,60 @@ function createOverlay() {
     pushState();
   });
 
+  const persistBounds = () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    savePrefs({ bounds: overlayWindow.getBounds() });
+  };
+
+  overlayWindow.on('moved', persistBounds);
+  overlayWindow.on('resized', persistBounds);
+
+  overlayWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      overlayWindow.hide();
+    }
+  });
+
   overlayWindow.on('closed', () => {
     overlayWindow = null;
   });
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, '..', '..', 'extension', 'icons', 'icon16.png');
+  let image = nativeImage.createFromPath(iconPath);
+  if (image.isEmpty()) {
+    image = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(image);
+  tray.setToolTip('YouTube Lyrics Overlay');
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Show overlay',
+      click: () => {
+        if (!overlayWindow) createOverlay();
+        overlayWindow?.showInactive();
+      },
+    },
+    {
+      label: 'Hide overlay',
+      click: () => overlayWindow?.hide(),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(menu);
+  tray.on('click', () => toggleOverlay());
 }
 
 function pushState() {
@@ -62,6 +131,7 @@ function pushState() {
     lyrics: latestLyrics,
     mode: displayMode,
     bridgeClients: bridge?.clientCount() || 0,
+    translating,
   });
 }
 
@@ -79,7 +149,6 @@ async function handleNowPlaying(payload) {
   const key = `${payload.artist}::${payload.track}`;
 
   if (latestLyrics?.key === key) {
-    // Same song — only refresh playback position for synced lines.
     latestLyrics = {
       ...latestLyrics,
       currentTime: payload.currentTime || 0,
@@ -117,6 +186,11 @@ async function handleNowPlaying(payload) {
       isPlaying: Boolean(payload.isPlaying),
       ...result,
     };
+
+    if (displayMode === 'translation' && latestLyrics.status === 'ready') {
+      await applyMode('translation');
+      return;
+    }
   } catch (err) {
     if (token !== fetchToken) return;
     latestLyrics = {
@@ -135,6 +209,7 @@ async function handleNowPlaying(payload) {
 
 async function applyMode(mode) {
   displayMode = mode;
+  savePrefs({ mode });
   pushState();
 
   if (
@@ -149,7 +224,7 @@ async function applyMode(mode) {
 
   const key = latestLyrics.key;
   const snapshot = { ...latestLyrics };
-  latestLyrics = { ...snapshot, status: 'loading' };
+  translating = true;
   pushState();
 
   try {
@@ -171,6 +246,8 @@ async function applyMode(mode) {
     if (latestLyrics?.key === key) {
       latestLyrics = { ...snapshot, status: 'ready' };
     }
+  } finally {
+    translating = false;
   }
 
   pushState();
@@ -196,6 +273,7 @@ function toggleOverlay() {
 
 app.whenReady().then(() => {
   createOverlay();
+  createTray();
 
   bridge = startBridge({
     onNowPlaying: handleNowPlaying,
@@ -224,5 +302,5 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Keep the process alive so the Chrome bridge stays up.
+  // Stay alive for tray + Chrome bridge.
 });
