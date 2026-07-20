@@ -1,11 +1,35 @@
 # YouTube Lyrics Overlay
 
-Escuta algo no YouTube no Chrome, e a letra aparece numa janelinha por cima de tudo.
+Overlay discreto de letras enquanto você ouve YouTube no Chrome.
 
-O `.exe` descobre a música pelo Windows. Para a letra **ir scrollando no tempo certo**,
-carregue também a extensão Chrome (ela só manda o tempo do player).
+A janelinha fica sempre por cima das outras apps, destaca a frase atual e mantém ela no centro da tela.
 
-## Jeito mais fácil (exe)
+---
+
+## Como funciona
+
+| Parte | Função |
+|-------|--------|
+| **App desktop** (`.exe`) | Detecta a música, busca a letra e mostra o overlay |
+| **Extensão Chrome** | Envia o tempo do player para a letra sincronizar e scrollar |
+
+Sem a extensão a letra ainda aparece, mas quase sempre fica parada no começo — o Windows não manda bem o tempo do YouTube.
+
+Fonte das letras: [LRCLIB](https://lrclib.net/).
+
+---
+
+## Requisitos
+
+- Windows 10/11
+- Node.js 18+
+- Google Chrome
+
+---
+
+## Instalação rápida
+
+### 1. Gerar o app
 
 ```bash
 cd desktop
@@ -13,23 +37,50 @@ npm install
 npm run dist
 ```
 
-O arquivo sai em:
+O executável fica em:
 
-`desktop/dist/YouTubeLyricsOverlay.exe`
+```text
+desktop/dist/YouTubeLyricsOverlay.exe
+```
 
-Abre o exe, dá play num vídeo no Chrome, e a letra deve aparecer.
+Abra o `.exe`. Ele também aparece na bandeja do sistema (tray).
 
-### Extensão (sync / scroll automático)
+### 2. Carregar a extensão Chrome
 
-1. Chrome → `chrome://extensions`
-2. Modo do desenvolvedor → **Carregar sem compactação** → pasta `extension/`
-3. Atualize a extensão e dê **F5** na aba do YouTube
-4. Badge `♪` = sync ligado
+1. Abra `chrome://extensions`
+2. Ative **Modo do desenvolvedor**
+3. Clique em **Carregar sem compactação**
+4. Selecione a pasta `extension/`
+5. Dê **F5** na aba do YouTube
 
-Sem a extensão a letra ainda aparece, mas quase sempre fica parada no começo
-(o Windows não manda bem o tempo do YouTube).
+O badge da extensão deve mostrar `♪` quando estiver sincronizando.
 
-## Durante o desenvolvimento
+### 3. Usar
+
+1. Deixe o app aberto
+2. Toque um vídeo no YouTube (aba ativa no Chrome)
+3. A letra aparece no overlay e acompanha a música
+
+---
+
+## Atalhos e modos
+
+| Atalho | Ação |
+|--------|------|
+| `Ctrl+Shift+L` | Mostrar / esconder o overlay |
+| `Ctrl+Shift+.` | Alternar modo da letra |
+
+| Botão | Modo |
+|-------|------|
+| **Aa** | Letra original |
+| **PT** | Tradução (sob demanda) |
+| **羅** | Romaji (kana; kanji ainda limitado na v1) |
+
+Dica: arraste pela barra superior para reposicionar a janela.
+
+---
+
+## Desenvolvimento
 
 ```bash
 cd desktop
@@ -37,29 +88,49 @@ npm install
 npm start
 ```
 
-## Modos
+Estrutura do projeto:
 
-| Botão | Modo |
-|-------|------|
-| Aa | Letra original |
-| PT | Tradução (sob demanda) |
-| 羅 | Romaji (kana; kanji fica como está na v1) |
+```text
+youtube-lyrics-overlay/
+├── desktop/          # App Electron (overlay + busca de letras)
+│   ├── src/
+│   └── dist/         # Saída do build (.exe)
+├── extension/        # Extensão Chrome (sync do playhead)
+└── README.md
+```
 
-| Atalho | Ação |
-|--------|------|
-| `Ctrl+Shift+L` | Mostrar / esconder |
-| `Ctrl+Shift+.` | Alternar modo |
+Scripts úteis:
 
-## Como detecta a música
+| Comando | O que faz |
+|---------|-----------|
+| `npm start` | Roda o app em modo desenvolvimento |
+| `npm run dist` | Gera o `.exe` portable |
 
-1. Título da janela do Chrome com `YouTube`
+---
+
+## Detecção da música
+
+O app tenta descobrir o que está tocando assim:
+
+1. Título da janela do Chrome que contém `YouTube`
 2. Controles de mídia do Windows (SMTC), quando existirem
 
-A aba do YouTube precisa estar a aba **ativa** daquela janela do Chrome (o título da janela muda com a aba).
+A aba do YouTube precisa ser a **aba ativa** daquela janela do Chrome (é o título da janela que muda).
 
-## Papel de cada parte
+---
 
-| Parte | Faz o quê |
-|-------|-----------|
-| `YouTubeLyricsOverlay.exe` | Detecta a música + busca letra + overlay |
-| Extensão Chrome | Envia `currentTime` pra letra acompanhar o vídeo |
+## Solução de problemas
+
+| Problema | O que tentar |
+|----------|----------------|
+| Overlay em “Waiting for YouTube…” | Confirme que a aba do YouTube está ativa e o app está aberto |
+| Letra não aparece | Troque de vídeo / aguarde alguns segundos; alguns uploads não têm letra no LRCLIB |
+| Letra não scrolla / fica no começo | Atualize a extensão, dê F5 no YouTube e veja se o badge está `♪` |
+| Tempo no rodapé fica em `0:00` | A extensão não está syncando — recarregue ela e a aba |
+| Fechou a janela sem querer | Use o ícone na bandeja → **Show overlay** (fechar só esconde) |
+
+---
+
+## Licença
+
+MIT
