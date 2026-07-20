@@ -181,36 +181,97 @@ async function translateLines(lines, target = 'pt') {
   return translated;
 }
 
+function normalizeTrackName(track) {
+  return String(track || '')
+    .replace(/\s*\(\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\)/gi, '')
+    .replace(/\s*\[\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\]/gi, '')
+    .replace(/\s*\(\s*Official\s*(Music\s*)?Video\s*\)/gi, '')
+    .replace(/\s*\(\s*Lyric\s*Video\s*\)/gi, '')
+    .replace(/\s*\(\s*Official\s*Audio\s*\)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function usableArtist(artist) {
+  if (!artist) return '';
+  if (/^unknown(\s+artist)?$/i.test(artist.trim())) return '';
+  return artist.trim();
+}
+
+function scoreHit(hit, artist, track) {
+  const a = (hit.artistName || '').toLowerCase();
+  const t = (hit.trackName || '').toLowerCase();
+  const wantA = (artist || '').toLowerCase();
+  const wantT = (track || '').toLowerCase();
+  let score = 0;
+
+  if (wantT && t === wantT) score += 8;
+  else if (wantT && t.includes(wantT)) score += 5;
+  else if (wantT && wantT.includes(t) && t.length > 4) score += 3;
+
+  if (wantA && a === wantA) score += 6;
+  else if (wantA && a.includes(wantA)) score += 3;
+
+  if (hit.syncedLyrics) score += 2;
+  else if (hit.plainLyrics) score += 1;
+
+  return score;
+}
+
 async function searchLrclib({ artist, track, duration }) {
-  const params = new URLSearchParams({
-    artist_name: artist || '',
-    track_name: track || '',
-  });
+  const cleanArtist = usableArtist(artist);
+  const cleanTrack = normalizeTrackName(track) || track;
 
-  if (duration && Number.isFinite(duration) && duration > 0) {
-    params.set('duration', String(Math.round(duration)));
+  if (cleanArtist && cleanTrack) {
+    const params = new URLSearchParams({
+      artist_name: cleanArtist,
+      track_name: cleanTrack,
+    });
+    if (duration && Number.isFinite(duration) && duration > 0) {
+      params.set('duration', String(Math.round(duration)));
+    }
+
+    const res = await fetch(`https://lrclib.net/api/get?${params.toString()}`);
+    if (res.ok) return res.json();
   }
 
-  let res = await fetch(`https://lrclib.net/api/get?${params.toString()}`);
+  const queries = [
+    [cleanArtist, cleanTrack].filter(Boolean).join(' '),
+    cleanTrack,
+  ].filter((q, i, arr) => q && arr.indexOf(q) === i);
 
-  if (res.status === 404) {
-    const q = new URLSearchParams({ q: `${artist} ${track}`.trim() });
-    res = await fetch(`https://lrclib.net/api/search?${q.toString()}`);
-    if (!res.ok) throw new Error('Lyrics search failed');
+  let best = null;
+  let bestScore = -1;
+
+  for (const q of queries) {
+    const res = await fetch(
+      `https://lrclib.net/api/search?${new URLSearchParams({ q })}`
+    );
+    if (!res.ok) continue;
     const results = await res.json();
-    if (!Array.isArray(results) || results.length === 0) return null;
-    return results[0];
+    if (!Array.isArray(results)) continue;
+
+    for (const hit of results) {
+      const score = scoreHit(hit, cleanArtist, cleanTrack);
+      if (score > bestScore) {
+        bestScore = score;
+        best = hit;
+      }
+    }
+
+    if (best && bestScore >= 5) break;
   }
 
-  if (!res.ok) throw new Error('Lyrics lookup failed');
-  return res.json();
+  return best;
 }
 
 async function fetchLyrics({ artist, track, duration }) {
-  const cached = readCache(artist, track);
+  const cleanArtist = usableArtist(artist);
+  const cleanTrack = normalizeTrackName(track) || track;
+  const cached = readCache(cleanArtist || artist, cleanTrack);
   if (cached) return cached;
 
-  const hit = await searchLrclib({ artist, track, duration });
+  const hit = await searchLrclib({ artist: cleanArtist, track: cleanTrack, duration });
   if (!hit) return null;
 
   const synced = parseLrc(hit.syncedLyrics);
@@ -229,9 +290,11 @@ async function fetchLyrics({ artist, track, duration }) {
     lines,
     hasCjk: lines.some((l) => l.romaji),
     translated: false,
+    resolvedArtist: hit.artistName || cleanArtist || artist,
+    resolvedTrack: hit.trackName || cleanTrack,
   };
 
-  writeCache(artist, track, payload);
+  writeCache(cleanArtist || artist, cleanTrack, payload);
   return payload;
 }
 

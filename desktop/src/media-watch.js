@@ -63,51 +63,50 @@ public class LyricsWinEnum {
   }
 } catch {}
 
-# Fast path: if we already have a Chrome/YouTube window title, skip slow SMTC.
-if (-not $result.windowTitle) {
-  try {
-    $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
-    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
-        $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1'
-      })[0]
+# Always try SMTC — Chrome often puts the channel/artist here even when the
+# window title is only the song name (e.g. "Master of Puppets (Remastered)").
+try {
+  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
+  $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+      $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1'
+    })[0]
 
-    function Await-WinRT($op) {
-      if (-not $op -or -not $asTaskGeneric) { return $null }
-      $task = $asTaskGeneric.MakeGenericMethod($op.GetType().GenericTypeArguments).Invoke($null, @($op))
-      $task.Wait(1200) | Out-Null
-      if ($task.IsCompleted -and -not $task.IsFaulted) { return $task.Result }
-      return $null
-    }
+  function Await-WinRT($op) {
+    if (-not $op -or -not $asTaskGeneric) { return $null }
+    $task = $asTaskGeneric.MakeGenericMethod($op.GetType().GenericTypeArguments).Invoke($null, @($op))
+    $task.Wait(1200) | Out-Null
+    if ($task.IsCompleted -and -not $task.IsFaulted) { return $task.Result }
+    return $null
+  }
 
-    $manager = Await-WinRT ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync())
-    if ($manager) {
-      $sessions = @($manager.GetSessions())
-      $session = $null
-      foreach ($s in $sessions) {
-        $app = [string]$s.SourceAppUserModelId
-        if ($app -match 'chrome|msedge|brave|opera|vivaldi') { $session = $s; break }
+  $manager = Await-WinRT ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync())
+  if ($manager) {
+    $sessions = @($manager.GetSessions())
+    $session = $null
+    foreach ($s in $sessions) {
+      $app = [string]$s.SourceAppUserModelId
+      if ($app -match 'chrome|msedge|brave|opera|vivaldi') { $session = $s; break }
+    }
+    if (-not $session) { $session = $manager.GetCurrentSession() }
+    if ($session) {
+      $result.appId = [string]$session.SourceAppUserModelId
+      $props = Await-WinRT ($session.TryGetMediaPropertiesAsync())
+      if ($props) {
+        $result.smtcTitle = [string]$props.Title
+        $result.smtcArtist = [string]$props.Artist
       }
-      if (-not $session) { $session = $manager.GetCurrentSession() }
-      if ($session) {
-        $result.appId = [string]$session.SourceAppUserModelId
-        $props = Await-WinRT ($session.TryGetMediaPropertiesAsync())
-        if ($props) {
-          $result.smtcTitle = [string]$props.Title
-          $result.smtcArtist = [string]$props.Artist
-        }
-        $playback = $session.GetPlaybackInfo()
-        if ($playback) { $result.status = [string]$playback.PlaybackStatus }
-        $timeline = $session.GetTimelineProperties()
-        if ($timeline) {
-          $result.position = [math]::Round($timeline.Position.TotalSeconds, 2)
-          $end = $timeline.EndTime.TotalSeconds
-          $start = $timeline.StartTime.TotalSeconds
-          if ($end -gt $start) { $result.duration = [math]::Round(($end - $start), 2) }
-        }
+      $playback = $session.GetPlaybackInfo()
+      if ($playback) { $result.status = [string]$playback.PlaybackStatus }
+      $timeline = $session.GetTimelineProperties()
+      if ($timeline) {
+        $result.position = [math]::Round($timeline.Position.TotalSeconds, 2)
+        $end = $timeline.EndTime.TotalSeconds
+        $start = $timeline.StartTime.TotalSeconds
+        if ($end -gt $start) { $result.duration = [math]::Round(($end - $start), 2) }
       }
     }
-  } catch {}
-}
+  }
+} catch {}
 
 $result | ConvertTo-Json -Compress
 `;
@@ -130,10 +129,14 @@ function cleanTitle(raw) {
     .replace(/\s*\[\s*Lyric\s*Video\s*\]/gi, '')
     .replace(/\s*\(\s*Official\s*Audio\s*\)/gi, '')
     .replace(/\s*\[\s*Official\s*Audio\s*\]/gi, '')
-    .replace(/\s*\(\s*\d{4}\s*Remaster(?:ed)?\s*\)/gi, '')
-    .replace(/\s*\[\s*\d{4}\s*Remaster(?:ed)?\s*\]/gi, '')
+    .replace(/\s*\(\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\)/gi, '')
+    .replace(/\s*\[\s*(?:\d{4}\s*)?Remaster(?:ed)?\s*\]/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+function isUnknownArtist(artist) {
+  return !artist || /^unknown(\s+artist)?$/i.test(artist.trim());
 }
 
 function parseArtistAndTrack(title, fallbackArtist = '') {
@@ -223,21 +226,16 @@ async function readNowPlaying() {
     title = cleanTitle(windowTitle);
   } else if (smtcTitle) {
     title = cleanTitle(smtcTitle);
-    artist = smtcArtist;
   } else {
     return null;
   }
 
-  // If SMTC also has artist info, prefer it when the window title is messy.
-  if (smtcArtist && smtcTitle && fromYoutubeSmtc) {
-    artist = smtcArtist;
-    if (!title.includes(' - ') && !title.includes(' – ')) {
-      title = cleanTitle(smtcTitle);
-    }
+  if (smtcArtist) {
+    artist = smtcArtist.replace(/\s*[-–—]\s*Topic$/i, '').trim();
   }
 
   const parsed = parseArtistAndTrack(title, artist);
-  if (artist && !/ - | – | — /.test(title)) {
+  if (!isUnknownArtist(artist) && isUnknownArtist(parsed.artist)) {
     parsed.artist = artist;
     parsed.track = cleanTitle(title);
   }

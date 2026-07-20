@@ -204,6 +204,18 @@ async function handleNowPlaying(payload) {
       ...result,
     };
 
+    // Fill in artist/title from LRCLIB when YouTube only gave the song name.
+    if (result?.resolvedArtist || result?.resolvedTrack) {
+      latestTrack = {
+        ...latestTrack,
+        artist: result.resolvedArtist || latestTrack.artist,
+        track: result.resolvedTrack || latestTrack.track,
+        title: `${result.resolvedArtist || latestTrack.artist} - ${
+          result.resolvedTrack || latestTrack.track
+        }`,
+      };
+    }
+
     if (displayMode === 'translation' && latestLyrics.status === 'ready') {
       await applyMode('translation');
       return;
