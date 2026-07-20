@@ -13,7 +13,7 @@ A janelinha fica sempre por cima das outras apps, destaca a frase atual e manté
 | **App desktop** (`.exe`) | Detecta a música, busca a letra e mostra o overlay |
 | **Extensão Chrome** | Envia o tempo do player para a letra sincronizar e scrollar |
 
-Sem a extensão a letra ainda aparece, mas quase sempre fica parada no começo — o Windows não manda bem o tempo do YouTube.
+Sem a extensão a letra ainda aparece, mas quase sempre fica parada no começo.
 
 Fonte das letras: [LRCLIB](https://lrclib.net/).
 
@@ -129,8 +129,3 @@ A aba do YouTube precisa ser a **aba ativa** daquela janela do Chrome (é o tít
 | Tempo no rodapé fica em `0:00` | A extensão não está syncando — recarregue ela e a aba |
 | Fechou a janela sem querer | Use o ícone na bandeja → **Show overlay** (fechar só esconde) |
 
----
-
-## Licença
-
-MIT
