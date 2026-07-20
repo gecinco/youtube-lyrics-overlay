@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Lyrics Overlay",
+  "version": "0.1.0",
+  "description": "Envia o que está tocando no YouTube pro overlay de letras.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1:19283/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*", "*://youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "YouTube Lyrics Overlay"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
