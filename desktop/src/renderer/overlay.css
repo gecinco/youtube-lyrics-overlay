@@ -149,9 +149,15 @@ button.ghost {
 .lyrics {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 14px 16px 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 16px;
   scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+.lines {
+  min-height: 100%;
 }
 
 .lyrics::-webkit-scrollbar {

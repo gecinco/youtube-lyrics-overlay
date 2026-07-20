@@ -83,6 +83,29 @@ function buildLines(lines, mode) {
   lastActive = -1;
 }
 
+function ensureCenterPadding() {
+  // Extra space so the first/last lines can also sit in the visual center.
+  const pad = Math.max(48, Math.floor(linesEl.clientHeight * 0.42));
+  linesEl.style.paddingTop = `${pad}px`;
+  linesEl.style.paddingBottom = `${pad}px`;
+}
+
+function scrollLineIntoView(active) {
+  if (!active || !linesEl) return;
+
+  ensureCenterPadding();
+
+  const viewH = linesEl.clientHeight;
+  const lineTop = active.offsetTop;
+  const lineH = active.offsetHeight || 24;
+  const target = lineTop - viewH / 2 + lineH / 2;
+  const maxScroll = Math.max(0, linesEl.scrollHeight - viewH);
+  const next = Math.min(maxScroll, Math.max(0, target));
+
+  // Always re-center the white line in this panel (not the window).
+  linesEl.scrollTo({ top: next, behavior: 'smooth' });
+}
+
 function updateActive(current) {
   if (current === lastActive) return;
   const prev = linesEl.querySelector('.line.active');
@@ -98,12 +121,7 @@ function updateActive(current) {
       const after = linesEl.querySelector(`.line[data-idx="${current + 1}"]`);
       before?.classList.add('near');
       after?.classList.add('near');
-
-      const box = linesEl.getBoundingClientRect();
-      const top = active.offsetTop - linesEl.scrollTop;
-      if (top < 48 || top > box.height - 90) {
-        active.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }
+      scrollLineIntoView(active);
     }
   }
   lastActive = current;
@@ -172,6 +190,7 @@ function renderLines() {
   if (nextKey !== builtKey) {
     buildLines(lines, mode);
     builtKey = nextKey;
+    ensureCenterPadding();
   }
 
   const current = activeIndex(lines, lyrics.currentTime, lyrics.duration);
